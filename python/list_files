@@ -1,0 +1,100 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals, print_function
+
+import os, sys, re
+from path import Path
+
+class Asc(object):
+  def __init__(self, obj, *args): self.obj = obj
+  def __lt__(self, other): return self.obj <  other.obj
+  def __gt__(self, other): return self.obj >  other.obj
+  def __eq__(self, other): return self.obj == other.obj
+  def __le__(self, other): return self.obj <= other.obj
+  def __ge__(self, other): return self.obj >= other.obj
+  def __ne__(self, other): return self.obj != other.obj
+class Dsc(object):
+  def __init__(self, obj, *args): self.obj = obj
+  def __lt__(self, other): return self.obj >  other.obj
+  def __gt__(self, other): return self.obj <  other.obj
+  def __eq__(self, other): return self.obj == other.obj
+  def __le__(self, other): return self.obj >= other.obj
+  def __ge__(self, other): return self.obj <= other.obj
+  def __ne__(self, other): return self.obj != other.obj
+
+def main():
+  attrs = "name dir path mode ino dev nlink uid gid size atime mtime ctime".\
+          split(" ")
+  attr2index = dict(zip(attrs, xrange(len(attrs))))
+  rx_attrs = re.compile("[+-]("+"|".join(attrs)+")")
+  rx_limit = re.compile('[+-]\d+')
+
+  # Parse arguments:
+  # from argparse import ArgumentParser, SUPPRESS
+
+  # parser = ArgumentParser(description=desc)
+  # addarg = parser.add_argument
+  # addarg("dir", metavar="DIRECTORY", nargs=1, help="lists DIRECTORY")
+  # args = parser.parse_args(sys.argv[1:])
+
+  opts, args = [], []
+  limit = None
+
+  for arg in sys.argv[1:]:
+    if rx_attrs.match(arg):
+      opts += [(arg[:1] == '+', arg[1:])]
+    elif rx_limit.match(arg):
+      limit = int(arg)
+    else:
+      args += [Path(arg)]
+
+  if not len(args):
+    args = [Path('.')]
+
+  # Get a list of all files:
+  def to_attrs(path):
+    return (path.name, path.folder, path,) + tuple(os.stat(path))
+
+  for folder in args:
+    if not folder.exists:
+      return print("Error: folder ‘{}’ does not exist.".format(folder))
+    elif folder.isfile:
+      return print("Error: path ‘{}’ is not a folder.".format(folder))
+
+  paths = []
+
+  for folder in args:
+    for (root, dirs, files) in folder.walk():
+      paths.extend(to_attrs(Path(root, name)) for name in (dirs + files) if Path(root, name).exists)
+
+  # Sort and print the list.
+  indices = [attr2index[o[1]] for o in opts]
+  indices = zip(range(len(indices)), indices)
+
+  if len(indices):
+    # def compare(a, b):
+    #   """ Returns -1/0/1 if 'a' is less/greater than/equal to 'b'. """
+    #   for (i, idx) in indices:
+    #     if a[idx] == b[idx]:
+    #       continue
+    #     elif a[idx] < b[idx]:
+    #       return -1 if opts[i][0] else 1
+    #     else:
+    #       return 1 if opts[i][0] else -1
+    #   return 0
+
+    def getter(row):
+      """ Returns a list of Dsc or Asc objects wrapping the items in 'row'. """
+      return [(Dsc, Asc)[opts[i][0]](row[idx]) for (i, idx) in indices]
+
+    paths.sort(key=getter)
+
+  if limit is not None:
+    paths = paths[limit:] if limit < 0 else paths[:limit]
+
+  for path in paths:
+    print(path[2].encode('utf-8'))
+
+
+if __name__ == '__main__':
+  main()
