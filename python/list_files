@@ -2,18 +2,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import unicode_literals, print_function
 
-import os, sys, re
+import os, sys, re, locale
 from path import Path
 
-class Asc(object):
-  def __init__(self, obj, *args): self.obj = obj
-  def __lt__(self, other): return self.obj <  other.obj
-  def __gt__(self, other): return self.obj >  other.obj
-  def __eq__(self, other): return self.obj == other.obj
-  def __le__(self, other): return self.obj <= other.obj
-  def __ge__(self, other): return self.obj >= other.obj
-  def __ne__(self, other): return self.obj != other.obj
+# class Asc(object):
+#   def __init__(self, obj, *args): self.obj = obj
+#   def __lt__(self, other): return self.obj <  other.obj
+#   def __gt__(self, other): return self.obj >  other.obj
+#   def __eq__(self, other): return self.obj == other.obj
+#   def __le__(self, other): return self.obj <= other.obj
+#   def __ge__(self, other): return self.obj >= other.obj
+#   def __ne__(self, other): return self.obj != other.obj
+def Asc(object):
+  # Just return the argument since normal comparison is the default.
+  return object
+
 class Dsc(object):
+  """ Used to reverse the sort order for its argument. """
   def __init__(self, obj, *args): self.obj = obj
   def __lt__(self, other): return self.obj >  other.obj
   def __gt__(self, other): return self.obj <  other.obj
@@ -22,73 +27,75 @@ class Dsc(object):
   def __ge__(self, other): return self.obj <= other.obj
   def __ne__(self, other): return self.obj != other.obj
 
+
 def main():
+  # atime = last read/write or attribute change
+  # mtime = contents changed
+  # ctime = contents or attributes changed
   attrs = "name dir path mode ino dev nlink uid gid size atime mtime ctime".\
           split(" ")
-  attr2index = dict(zip(attrs, xrange(len(attrs))))
-  rx_attrs = re.compile("[+-]("+"|".join(attrs)+")")
-  rx_limit = re.compile('[+-]\d+')
+  attr2index = dict(zip(attrs, xrange(len(attrs)))) # {'name':0, ...}
+  rx_attrs = re.compile(r'[+-]('+"|".join(attrs)+")")
+  rx_limit = re.compile(r'[+-]\d+')
 
   # Parse arguments:
-  # from argparse import ArgumentParser, SUPPRESS
-
-  # parser = ArgumentParser(description=desc)
-  # addarg = parser.add_argument
-  # addarg("dir", metavar="DIRECTORY", nargs=1, help="lists DIRECTORY")
-  # args = parser.parse_args(sys.argv[1:])
-
-  opts, args = [], []
+  options, folders = [], []
   limit = None
 
   for arg in sys.argv[1:]:
+    if arg in ('+time', '-time'): # Synonym for ctime.
+      arg = arg[:1] + 'ctime'
     if rx_attrs.match(arg):
-      opts += [(arg[:1] == '+', arg[1:])]
+      options += [((Dsc, Asc)[arg[:1] == '+'], attr2index[arg[1:]])] # E.g.: "+size" --> (Asc, 9)
     elif rx_limit.match(arg):
       limit = int(arg)
     else:
-      args += [Path(arg)]
+      folders += [Path(arg)]
 
-  if not len(args):
-    args = [Path('.')]
+  if not len(folders):
+    folders = [Path('.')]
 
-  # Get a list of all files:
-  def to_attrs(path):
-    return (path.name, path.folder, path,) + tuple(os.stat(path))
-
-  for folder in args:
+  # Check existence.
+  for folder in folders:
     if not folder.exists:
       return print("Error: folder ‘{}’ does not exist.".format(folder))
     elif folder.isfile:
       return print("Error: path ‘{}’ is not a folder.".format(folder))
 
+  # Walk the folders and get all the files and their attributes:
   paths = []
 
-  for folder in args:
+  def get_attrs(path):
+    #       name,      dir,         path,    file_attributes
+    return (path.name, path.folder, path,) + tuple(os.stat(path))
+
+  for folder in folders:
     for (root, dirs, files) in folder.walk():
-      paths.extend(to_attrs(Path(root, name)) for name in (dirs + files) if Path(root, name).exists)
+      paths.extend(get_attrs(Path(root, name)) for name in (dirs + files) if Path(root, name).exists)
 
-  # Sort and print the list.
-  indices = [attr2index[o[1]] for o in opts]
-  indices = zip(range(len(indices)), indices)
 
-  if len(indices):
-    # def compare(a, b):
-    #   """ Returns -1/0/1 if 'a' is less/greater than/equal to 'b'. """
-    #   for (i, idx) in indices:
-    #     if a[idx] == b[idx]:
-    #       continue
-    #     elif a[idx] < b[idx]:
-    #       return -1 if opts[i][0] else 1
-    #     else:
-    #       return 1 if opts[i][0] else -1
-    #   return 0
+  # Sort the list by the requested attributes.
+  if len(options):
+    # TODO: use locale.strxfrm?
+    def lower_cmp(func):
+      return lambda x: func(unicode.lower(x))
+    # i < 3 because the first three items are path strings.
+    options = [(lower_cmp(o[0]), o[1]) if i < 3 else o for i, o in enumerate(options)]
 
-    def getter(row):
+    def sorty_by_multiple(row):
       """ Returns a list of Dsc or Asc objects wrapping the items in 'row'. """
-      return [(Dsc, Asc)[opts[i][0]](row[idx]) for (i, idx) in indices]
+      return [comparator(row[attr_index]) for (comparator, attr_index) in options]
 
-    paths.sort(key=getter)
+    comparator = options[0][0]
+    attr_index = options[0][1]
 
+    def sorty_by_single(row):
+      """ Returns a Dsc or Asc object wrapping one item in 'row'. """
+      return comparator(row[attr_index])
+
+    paths.sort(key=(sorty_by_single, sorty_by_multiple)[len(options) != 1])
+
+  # Limit results
   if limit is not None:
     paths = paths[limit:] if limit < 0 else paths[:limit]
 
