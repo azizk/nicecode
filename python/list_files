@@ -79,15 +79,14 @@ def main():
     # TODO: use locale.strxfrm?
     def lower_cmp(func):
       return lambda x: func(unicode.lower(x))
-    # i < 3 because the first three items are path strings.
-    options = [(lower_cmp(o[0]), o[1]) if i < 3 else o for i, o in enumerate(options)]
+    # o[1] < 3 because the first three array items are path strings (see get_attrs).
+    options = [(lower_cmp(o[0]), o[1]) if o[1] < 3 else o for o in options]
 
     def sorty_by_multiple(row):
       """ Returns a list of Dsc or Asc objects wrapping the items in 'row'. """
       return [comparator(row[attr_index]) for (comparator, attr_index) in options]
 
-    comparator = options[0][0]
-    attr_index = options[0][1]
+    comparator, attr_index = options[0]
 
     def sorty_by_single(row):
       """ Returns a Dsc or Asc object wrapping one item in 'row'. """
@@ -100,7 +99,10 @@ def main():
     paths = paths[limit:] if limit < 0 else paths[:limit]
 
   for path in paths:
-    print(path[2].encode('utf-8'))
+    name = path[2]
+    if path[2].isdir:
+      name += '/'
+    print(name.encode('utf-8'))
 
 
 if __name__ == '__main__':
