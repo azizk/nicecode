@@ -44,29 +44,25 @@ defmodule Common do
     end
   end
 
-  # defmacro if_({:<~, _, [l, r]}) do
-  #   quote do
-  #     # try do
-  #     #   unquote(l) = unquote(r)
-  #     # rescue
-  #     #   e in MatchError -> nil
-  #     # end
-  #     # l_ = unquote(l)
-  #     # r_ = unquote(r)
-  #     # if match?(l_, r_) do
-  #     #   unquote(l) = unquote(r)
-  #     # else
-  #     #   nil
-  #     # end
-  #     case unquote(r) do
-  #       unquote(l) ->
-  #         true
+  @doc "An if-statement with a match operator condition."
+  defmacro ifm({:<-, _, [l, r]}, do: do_body) do
+    quote do
+      case unquote(r) do
+        unquote(l) -> unquote(do_body)
+        _ -> nil
+      end
+    end
+  end
 
-  #       _ ->
-  #         false
-  #     end
-  #   end
-  # end
+  @doc "An if-statement with a match operator condition."
+  defmacro ifm({:<-, _, [l, r]}, do: do_body, else: else_body) do
+    quote do
+      case unquote(r) do
+        unquote(l) -> unquote(do_body)
+        _ -> unquote(else_body)
+      end
+    end
+  end
 
   @doc "The match? function as an operator."
   defmacro pattern <~ expression do
@@ -76,8 +72,25 @@ defmodule Common do
   end
 end
 
-defmodule Run do
+defmodule TestCommon do
   import Common
+  import ExUnit.Assertions
+
+  res =
+    ifm {:ok, x} <- {:ok, 10} do
+      x
+    end
+
+  assert res == 10
+
+  res =
+    ifm {:ok, x} <- {:no, 10} do
+      x
+    else
+      3
+    end
+
+  assert res == 3
 
   {:ok, 5}
   |> branch {:ok, b} do
