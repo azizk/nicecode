@@ -23,13 +23,16 @@ defmodule Common do
   defmacro e_or(ok_exp, or_exp), do: atom_or(:error, ok_exp, or_exp)
 
   @doc "A cond statement usable in pipe statements."
-  defmacro branch(expr, variable, do: clauses) do
+  defmacro branch(expr, match_expr, do: clauses) do
     quote do
-      # TODO: don't leak variable.
-      unquote(variable) = unquote(expr)
+      case unquote(expr) do
+        unquote(match_expr) = x ->
+          cond do
+            unquote(clauses ++ quote(do: (true -> x)))
+          end
 
-      cond do
-        unquote(clauses ++ quote(do: (true -> unquote(expr))))
+        x ->
+          x
       end
     end
   end
@@ -76,28 +79,14 @@ end
 defmodule Run do
   import Common
 
-  IO.inspect(
-    quote do
-      cond do
-        x -> 1
-        true -> 2
-      end
-    end
-  )
+  {:ok, 5}
+  |> branch {:ok, b} do
+    b == 5 -> 6
+  end
+  |> IO.inspect(label: "branch({:ok, 5})")
 
-  IO.inspect(
-    Macro.expand_once(
-      quote do
-        branch 10, bbb do
-          bbb -> 123
-        end
-      end,
-      __ENV__
-    )
-  )
-
-  4
-  |> branch xY do
+  {:ok, 4}
+  |> branch {:ok, xY} do
     xY < 1 ->
       IO.puts("x is less than one")
       2
@@ -110,7 +99,7 @@ defmodule Run do
       -7
   end
   |> branch xY do
-    xY == -7 -> IO.puts("xY: #{xY}")
+    xY == -6 -> IO.puts("branch xY: #{xY}")
   end
   |> IO.inspect(label: "branch")
 
