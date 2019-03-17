@@ -72,6 +72,52 @@ defmodule Common do
   end
 end
 
+defmodule Tree do
+  @example_tree [
+    a: 0,
+    b: 0,
+    c: 0,
+    d: 0,
+    K: [:a],
+    O: [],
+    L: [:b, :K, :O],
+    N: [:c],
+    M: [:N]
+  ]
+
+  def example_tree(), do: @example_tree
+
+  def edges(tree_list, fun) do
+    Enum.reduce(tree_list, [], fn
+      {id, [_ | _] = children}, edges -> Enum.reduce(children, edges, &[fun.(&1, id) | &2])
+      _, edges -> edges
+    end)
+  end
+
+  def c_to_p_edges(list), do: edges(list, &{&1, &2})
+  def p_to_c_edges(list), do: edges(list, &{&2, &1})
+
+  def get_levels(list) do
+    Enum.reduce(list, [], fn {id, children}, id_to_levels ->
+      levels =
+        if is_list(children) and children != [] do
+          Enum.reduce(children, 0, fn child_id, n ->
+            if child_level = id_to_levels[child_id],
+              do: max(n, child_level),
+              else: raise("id :#{child_id} is not defined")
+          end) + 1
+        end
+
+      put_in(id_to_levels[id], levels || 0)
+    end)
+  end
+
+  def sort_by_depth(list) do
+    by_levels = get_levels(list)
+    Enum.sort_by(list, fn {id, _} -> by_levels[id] end, &Kernel.>=/2)
+  end
+end
+
 defmodule TestCommon do
   import Common
   import ExUnit.Assertions
