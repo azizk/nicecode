@@ -47,17 +47,35 @@ defmodule UpdateFromValues do
 
   @type value_map :: %{required(:id) => pos_integer}
 
-  @spec update_from_values_query(module, [value_map], binary) ::
-          Ecto.Query.t()
+  @spec update_from_values_query(module, [value_map], binary) :: Ecto.Query.t()
   def update_from_values_query(schema, values, cte_name \\ "values") do
     with_values(schema, values, cte_name)
-    |> join(:inner, [target], ^cte_name, on: [id: target.id], as: :values)
+    |> join(:inner, [x], ^cte_name, on: [id: x.id], as: :values)
   end
 
   @spec update_posts_from([value_map]) :: {pos_integer, nil}
   def update_posts_from(values) do
     update_from_values_query(Post, values)
     |> update([values: v], set: [title: v.title, updated_at: fragment("now()")])
+    |> where_if_any_distinct([:title])
     |> Repo.update_all([])
+  end
+
+  defmacro distinct?(a, b) do
+    quote(do: fragment("? is distinct from ?", unquote(a), unquote(b)))
+  end
+
+  @spec where_if_any_distinct(Ecto.Query.t(), [atom]) :: Ecto.Query.t()
+  def where_if_any_distinct(query, fields) do
+    [first | rest] = fields
+
+    is_any_field_distinct =
+      rest
+      |> Enum.reduce(
+        dynamic([x, values: v], distinct?(field(x, ^first), field(v, ^first))),
+        &dynamic([x, values: v], distinct?(field(x, ^&1), field(v, ^&1)) or ^&2)
+      )
+
+    query |> where(^is_any_field_distinct)
   end
 end
