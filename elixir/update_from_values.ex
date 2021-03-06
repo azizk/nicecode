@@ -23,7 +23,7 @@ defmodule UpdateFromValues do
   end
 
   defmacro with_cte_values(queryable, schema, cte_name, values) do
-    source = inspect(Macro.expand(schema, __ENV__).__schema__(:source))
+    source = inspect(Macro.expand(schema, __CALLER__).__schema__(:source))
 
     quote do
       Ecto.Query.with_cte(unquote(queryable), unquote(cte_name),
